@@ -5,6 +5,7 @@ from typing import Callable, Dict, Hashable, List, Optional, Tuple, Union
 from datasketch.minhash import MinHash
 from datasketch.weighted_minhash import WeightedMinHash
 from datasketch.storage import ordered_storage, unordered_storage, _random_name
+import threading
 
 from scipy.integrate import quad as integrate
 
@@ -144,6 +145,7 @@ class MinHashLSH(object):
         prepickle: Optional[bool] = None,
         hashfunc: Optional[Callable[[bytes], bytes]] = None,
     ) -> None:
+        self.lock = threading.Lock()
         storage_config = {"type": "dict"} if not storage_config else storage_config
         self._buffer_size = 50000
         if threshold > 1.0 or threshold < 0.0:
@@ -344,10 +346,11 @@ class MinHashLSH(object):
                 "Expecting minhash with length %d, got %d" % (self.h, len(minhash))
             )
         candidates = set()
-        for (start, end), hashtable in zip(self.hashranges, self.hashtables):
-            H = self._H(minhash.hashvalues[start:end])
-            for key in hashtable.get(H):
-                candidates.add(key)
+        with self.lock:
+            for (start, end), hashtable in zip(self.hashranges, self.hashtables):
+                H = self._H(minhash.hashvalues[start:end])
+                for key in hashtable.get(H):
+                    candidates.add(key)
         if self.prepickle:
             return [pickle.loads(key) for key in candidates]
         else:
@@ -427,11 +430,12 @@ class MinHashLSH(object):
             key = pickle.dumps(key)
         if key not in self.keys:
             raise ValueError("The given key does not exist")
-        for H, hashtable in zip(self.keys[key], self.hashtables):
-            hashtable.remove_val(H, key)
-            if not hashtable.get(H):
-                hashtable.remove(H)
-        self.keys.remove(key)
+        with self.lock:
+            for H, hashtable in zip(self.keys[key], self.hashtables):
+                hashtable.remove_val(H, key)
+                if not hashtable.get(H):
+                    hashtable.remove(H)
+            self.keys.remove(key)
 
     def is_empty(self) -> bool:
         """
