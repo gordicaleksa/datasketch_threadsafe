@@ -5,7 +5,7 @@ from typing import Callable, Dict, Hashable, List, Optional, Tuple, Union
 from datasketch.minhash import MinHash
 from datasketch.weighted_minhash import WeightedMinHash
 from datasketch.storage import ordered_storage, unordered_storage, _random_name
-import threading
+import multiprocessing
 
 from scipy.integrate import quad as integrate
 
@@ -145,7 +145,8 @@ class MinHashLSH(object):
         prepickle: Optional[bool] = None,
         hashfunc: Optional[Callable[[bytes], bytes]] = None,
     ) -> None:
-        self.lock = threading.Lock()
+        m = multiprocessing.Manager()
+        self.lock = m.Lock()
         storage_config = {"type": "dict"} if not storage_config else storage_config
         self._buffer_size = 50000
         if threshold > 1.0 or threshold < 0.0:
